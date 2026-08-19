@@ -10,9 +10,9 @@ Publicado con GitHub Pages: **https://marancibia-glitch.github.io/Seguimiento-de
 **Esta página es pública y no tiene contraseña.** GitHub Pages no permite ponerle una:
 sirve archivos estáticos y el sitio es accesible para cualquiera que tenga la dirección.
 
-El archivo `index.html` lleva los 692 registros incrustados, **incluidos RUT, teléfono
-particular y correo personal**. Esas tres columnas no se muestran en pantalla, pero están
-dentro de la página: se obtienen leyendo el código fuente o exportando el CSV.
+El archivo `datos.json` lleva todos los registros, **incluidos RUT, teléfono particular y
+correo personal**. Esas tres columnas no se muestran en pantalla, pero se obtienen abriendo
+`datos.json` directamente o exportando el CSV.
 
 Consecuencia práctica: **no difundas la dirección fuera de la empresa.** Se añadió
 `noindex` y `robots.txt` para que los buscadores no lo indexen, pero eso no impide el
@@ -21,17 +21,23 @@ acceso a quien tenga el enlace.
 Si en algún momento se necesita control de acceso real, hay que volver a un servidor
 (la versión con clave está en el repositorio privado `Seguimiento-Firmas`).
 
-## Cómo actualizar los datos
+## Cómo se actualizan los datos
 
-La fuente es `BBDD.xlsx`, hoja "Reporte Firma Contratos", con el encabezado en la fila 6.
+**Solo, cada mañana.** Un script en Google Apps Script busca el correo diario
+"BUK | Seguimiento de Firmas", extrae el Excel adjunto, lo convierte a `datos.json` y lo
+sube a este repositorio. GitHub Pages republica y el panel queda al día. Corre en la nube
+de Google, así que funciona con el computador apagado.
 
-**Para una revisión rápida solo tuya:** abre el panel y usa el botón
-**⬆ Cargar reporte actualizado (.xlsx)**. Se recalcula todo al instante, pero el cambio
-vive únicamente en tu navegador y desaparece al recargar. Nadie más lo ve.
+El panel muestra abajo la fecha de la última actualización.
 
-**Para actualizar lo que ve todo el mundo:** hay que regenerar `index.html` con los datos
-nuevos y subir el commit. Con GitHub Desktop: cambias el archivo, escribes un mensaje de
-commit y pulsas **Push origin**. GitHub Pages republica solo en un par de minutos.
+La configuración de todo eso está en `automatizacion/` (fuera de este repositorio).
+
+**Si la actualización falla,** el panel conserva los datos anteriores — nunca queda en
+blanco — y llega un correo de aviso.
+
+**Para una revisión puntual solo tuya:** el botón **⬆ Cargar reporte actualizado (.xlsx)**
+lee un archivo en tu navegador y recalcula todo al instante. Ese cambio no se guarda ni lo
+ve nadie más; al recargar vuelven los datos publicados.
 
 ## Enlaces por responsable
 
@@ -66,6 +72,10 @@ existe en el equipo donde lo escribas y no viaja con la página.
 
 | Archivo | Para qué |
 |---|---|
-| `index.html` | El panel completo, autocontenido (datos + librería de lectura de Excel) |
+| `index.html` | El panel: interfaz, cálculos y lector de Excel para cargas manuales |
+| `datos.json` | Los datos. Es el único archivo que reescribe la actualización diaria |
 | `robots.txt` | Pide a los buscadores que no indexen |
 | `.nojekyll` | Evita que GitHub Pages procese el sitio con Jekyll |
+
+Los datos van aparte del panel a propósito: así la actualización diaria solo reescribe un
+archivo de datos en vez de regenerar el HTML completo.
