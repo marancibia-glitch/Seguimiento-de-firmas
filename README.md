@@ -35,9 +35,11 @@ La configuración de todo eso está en `automatizacion/` (fuera de este reposito
 **Si la actualización falla,** el panel conserva los datos anteriores — nunca queda en
 blanco — y llega un correo de aviso.
 
-**Para una revisión puntual solo tuya:** el botón **⬆ Cargar reporte actualizado (.xlsx)**
-lee un archivo en tu navegador y recalcula todo al instante. Ese cambio no se guarda ni lo
-ve nadie más; al recargar vuelven los datos publicados.
+**Botón ⟳ Actualizar panel:** vuelve a leer los datos publicados sin recargar la página.
+Sirve para traer lo último si el panel quedó abierto desde antes de la actualización de la
+mañana. Si ya estabas al día, lo dice.
+
+No hay carga manual de archivos: los datos los publica la automatización.
 
 ## Enlaces por responsable
 
@@ -72,7 +74,7 @@ existe en el equipo donde lo escribas y no viaja con la página.
 
 | Archivo | Para qué |
 |---|---|
-| `index.html` | El panel: interfaz, cálculos y lector de Excel para cargas manuales |
+| `index.html` | El panel: interfaz y cálculos (95 KB) |
 | `datos.json` | Los datos. Es el único archivo que reescribe la actualización diaria |
 | `robots.txt` | Pide a los buscadores que no indexen |
 | `.nojekyll` | Evita que GitHub Pages procese el sitio con Jekyll |
