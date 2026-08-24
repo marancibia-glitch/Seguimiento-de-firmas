@@ -41,6 +41,18 @@ mañana. Si ya estabas al día, lo dice.
 
 No hay carga manual de archivos: los datos los publica la automatización.
 
+## Exportar a Excel
+
+El botón **⬇ Exportar a Excel (filtrado)** descarga lo que estés viendo en la tabla, con
+los filtros aplicados, en un `.xlsx`.
+
+El archivo reproduce **las mismas 20 columnas del reporte de BUK, en el mismo orden**,
+incluida la columna `Responsable` que se agregó al final el 24/08/2026. Así sirve igual que
+el archivo de origen.
+
+Se genera sin librerías externas (un `.xlsx` es un ZIP con XML), para no cargar los 875 KB
+que pesaba la librería de Excel frente a los 95 KB de todo el panel.
+
 ## Enlaces por responsable
 
 Añadiendo `?viewer=<Nombre Supervisor>` a la dirección, el panel muestra solo el personal

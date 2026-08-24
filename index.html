@@ -279,6 +279,9 @@
   .badge.critical { background: rgba(208,59,59,0.14); color: var(--critical); }
   .badge.muted { background: var(--chip-bg); color: var(--text-secondary); }
   .row-count { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+  .export-status { font-size: 12px; color: var(--text-secondary); }
+  .export-status.ok { color: var(--success-text); }
+  .export-status.error { color: var(--critical); }
   .empty-state { padding: 30px 10px; text-align: center; color: var(--text-muted); font-size: 13px; }
 
   .footer-note { font-size: 11.5px; color: var(--text-muted); text-align: center; margin-top: 24px; line-height: 1.6; }
@@ -441,7 +444,8 @@
         <option value="Firmado">Mostrar: Firmado</option>
         <option value="No Requiere Firma">Mostrar: No Requiere Firma</option>
       </select>
-      <button class="export-btn" id="export-csv" type="button">⬇ Exportar CSV (filtrado)</button>
+      <button class="export-btn" id="export-excel" type="button">⬇ Exportar a Excel (filtrado)</button>
+      <span class="export-status" id="export-status" role="status" aria-live="polite"></span>
     </div>
     <div class="table-wrap">
       <table class="data-table" id="detail-table">
@@ -1228,17 +1232,45 @@
   function getDetailCols() {
     return state.restrictedViewer ? DETAIL_COLS_FULL.filter(function (c) { return c.key !== "responsable"; }) : DETAIL_COLS_FULL;
   }
-  var EXPORT_EXTRA_COLS = [
-    { key: "rut", label: "RUT" },
-    { key: "telefono", label: "Teléfono" },
-    { key: "correo", label: "Email" },
+  /**
+   * Columnas del Excel exportado. Reproducen el reporte de BUK en el mismo orden y
+   * con los mismos títulos, para que el archivo sirva igual que el de origen, más
+   * la columna "Responsable" que BUK agregó al final.
+   *
+   * Si un registro no trae algún campo (por ejemplo un reporte antiguo sin la
+   * columna nueva), la celda sale vacía.
+   */
+  var EXPORT_COLS = [
+    { key: "empresa", label: "Nombre Empresa" },
+    { key: "rut", label: "Número de Documento" },
+    { key: "codigoFicha", label: "Código de Ficha" },
+    { key: "nombre", label: "Nombre Completo" },
+    { key: "telefono", label: "Teléfono Particular" },
+    { key: "correo", label: "Email Personal" },
+    { key: "region", label: "Región" },
     { key: "comuna", label: "Comuna" },
-    { key: "fechaIngreso", label: "Fecha Ingreso" },
-    { key: "fechaTermino", label: "Fecha Término" },
+    { key: "fechaIngreso", label: "Fecha Ingreso Compañía" },
+    { key: "fechaTermino", label: "Fecha Término Trabajo" },
+    { key: "conLiquidaciones", label: "Con Liquidaciones" },
+    { key: "responsable", label: "Nombre Supervisor" },
+    { key: "marca", label: "Marca" },
+    { key: "cliente", label: "Cliente" },
     { key: "campana", label: "Campaña" },
-    { key: "conLiquidaciones", label: "Con Liquidaciones" }
+    { key: "cargo", label: "Cargo" },
+    { key: "semana", label: "Semana" },
+    { key: "estadoFirma", label: "Estado Firma Colaborador" },
+    { key: "estado", label: "Estado" },
+    { key: "responsableReporte", label: "Responsable" }
   ];
-  function getExportCols() { return getDetailCols().concat(EXPORT_EXTRA_COLS); }
+
+  /**
+   * Quien entra con un link personal no debe llevarse la columna que identifica al
+   * supervisor de otros; en su archivo todo es suyo, así que esa columna no aporta.
+   */
+  function getExportCols() {
+    if (!state.restrictedViewer) return EXPORT_COLS;
+    return EXPORT_COLS.filter(function (c) { return c.key !== "responsable"; });
+  }
 
   function renderDetailTable(filtered) {
     var DETAIL_COLS = getDetailCols();
@@ -1290,35 +1322,239 @@
 
     var countEl = document.getElementById("row-count");
     countEl.textContent = "Mostrando " + fmtInt(Math.min(rows.length, MAX_RENDER)) + " de " + fmtInt(rows.length) + " registros" +
-      (rows.length > MAX_RENDER ? " (usa filtros o exporta CSV para ver el resto)" : "");
+      (rows.length > MAX_RENDER ? " (usa filtros o exporta a Excel para ver el resto)" : "");
 
     state._currentTableRows = rows;
   }
 
-  function exportCsv() {
-    var DETAIL_COLS = getExportCols();
-    var rows = state._currentTableRows || [];
-    var header = DETAIL_COLS.map(function (c) { return c.label; });
-    var lines = [header.join(";")];
-    rows.forEach(function (r) {
-      var line = DETAIL_COLS.map(function (c) {
-        var v = r[c.key];
-        v = v === null || v === undefined ? "" : String(v);
-        v = v.replace(/"/g, '""');
-        if (v.indexOf(";") !== -1 || v.indexOf('"') !== -1) v = '"' + v + '"';
-        return v;
-      });
-      lines.push(line.join(";"));
+  /* ---------- Escritura de .xlsx ---------- */
+  /*
+   * Un .xlsx es un ZIP con archivos XML dentro. Se genera a mano en lugar de cargar
+   * una librer\u00EDa de Excel, que pesaba 875 KB frente a los 95 KB de todo el panel.
+   * Las entradas del ZIP se guardan sin comprimir (m\u00E9todo "store"): Excel las abre
+   * igual y as\u00ED no hace falta implementar compresi\u00F3n.
+   */
+
+  var CRC_TABLA = (function () {
+    var tabla = new Int32Array(256);
+    for (var i = 0; i < 256; i++) {
+      var c = i;
+      for (var j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      tabla[i] = c;
+    }
+    return tabla;
+  })();
+
+  function crc32(bytes) {
+    var c = -1;
+    for (var i = 0; i < bytes.length; i++) c = CRC_TABLA[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ -1) >>> 0;
+  }
+
+  function aBytes(texto) {
+    return new TextEncoder().encode(texto);
+  }
+
+  /** Escapa lo que no puede ir literal dentro de un XML. */
+  function xmlEscape(valor) {
+    return String(valor)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      // Excel rechaza el archivo si aparecen caracteres de control.
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+  }
+
+  /** Nombre de columna de Excel: 1 -> A, 27 -> AA. */
+  function letraColumna(n) {
+    var s = "";
+    while (n > 0) {
+      var r = (n - 1) % 26;
+      s = String.fromCharCode(65 + r) + s;
+      n = Math.floor((n - 1) / 26);
+    }
+    return s;
+  }
+
+  /** Empaqueta {nombre: contenido} en un ZIP y devuelve un Blob. */
+  function armarZip(archivos) {
+    var locales = [];
+    var central = [];
+    var desplazamiento = 0;
+
+    function u16(v) { return [v & 0xFF, (v >>> 8) & 0xFF]; }
+    function u32(v) { return [v & 0xFF, (v >>> 8) & 0xFF, (v >>> 16) & 0xFF, (v >>> 24) & 0xFF]; }
+
+    archivos.forEach(function (archivo) {
+      var nombre = aBytes(archivo.nombre);
+      var datos = aBytes(archivo.contenido);
+      var crc = crc32(datos);
+
+      // Cabecera local + nombre + datos
+      var cabecera = []
+        .concat(u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(0), u16(0),
+                u32(crc), u32(datos.length), u32(datos.length),
+                u16(nombre.length), u16(0));
+      locales.push(new Uint8Array(cabecera), nombre, datos);
+
+      // Entrada del directorio central, que apunta a la cabecera local
+      central.push(new Uint8Array([]
+        .concat(u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(0), u16(0),
+                u32(crc), u32(datos.length), u32(datos.length),
+                u16(nombre.length), u16(0), u16(0), u16(0), u16(0), u32(0),
+                u32(desplazamiento))), nombre);
+
+      desplazamiento += cabecera.length + nombre.length + datos.length;
     });
-    var blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = "firmas_contratos_filtrado.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+
+    var tamanoCentral = central.reduce(function (t, p) { return t + p.length; }, 0);
+    var fin = new Uint8Array([]
+      .concat(u32(0x06054b50), u16(0), u16(0),
+              u16(archivos.length), u16(archivos.length),
+              u32(tamanoCentral), u32(desplazamiento), u16(0)));
+
+    return new Blob(locales.concat(central, [fin]),
+      { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  }
+
+  /**
+   * Construye el .xlsx. Los textos van como "inline strings" para no tener que
+   * mantener la tabla de cadenas compartidas que usa Excel.
+   */
+  function construirXlsx(columnas, filas, nombreHoja) {
+    var xmlFilas = [];
+
+    var celdasEncabezado = columnas.map(function (col, i) {
+      return '<c r="' + letraColumna(i + 1) + '1" t="inlineStr" s="1">' +
+             '<is><t>' + xmlEscape(col.label) + '</t></is></c>';
+    }).join("");
+    xmlFilas.push('<row r="1">' + celdasEncabezado + '</row>');
+
+    filas.forEach(function (fila, indiceFila) {
+      var numero = indiceFila + 2;
+      var celdas = columnas.map(function (col, i) {
+        var valor = fila[col.key];
+        if (valor === null || valor === undefined || valor === "") return "";
+        var ref = letraColumna(i + 1) + numero;
+        // Los n\u00FAmeros se escriben como n\u00FAmero para poder sumarlos en Excel.
+        if (typeof valor === "number" && isFinite(valor)) {
+          return '<c r="' + ref + '"><v>' + valor + '</v></c>';
+        }
+        return '<c r="' + ref + '" t="inlineStr"><is><t>' + xmlEscape(valor) + '</t></is></c>';
+      }).join("");
+      xmlFilas.push('<row r="' + numero + '">' + celdas + '</row>');
+    });
+
+    var anchos = columnas.map(function (col, i) {
+      var ancho = Math.min(46, Math.max(11, col.label.length + 3));
+      return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + ancho + '" customWidth="1"/>';
+    }).join("");
+
+    var ultima = letraColumna(columnas.length) + (filas.length + 1);
+
+    var hoja =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<dimension ref="A1:' + ultima + '"/>' +
+      '<sheetViews><sheetView workbookViewId="0">' +
+      '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>' +
+      '</sheetView></sheetViews>' +
+      '<cols>' + anchos + '</cols>' +
+      '<sheetData>' + xmlFilas.join("") + '</sheetData>' +
+      '<autoFilter ref="A1:' + ultima + '"/>' +
+      '</worksheet>';
+
+    // Dos formatos: el 0 normal y el 1 en negrita para el encabezado.
+    var estilos =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<fonts count="2">' +
+      '<font><sz val="11"/><name val="Calibri"/></font>' +
+      '<font><b/><sz val="11"/><name val="Calibri"/></font>' +
+      '</fonts>' +
+      '<fills count="2"><fill><patternFill patternType="none"/></fill>' +
+      '<fill><patternFill patternType="gray125"/></fill></fills>' +
+      '<borders count="1"><border/></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="2">' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+      '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+      '</cellXfs>' +
+      '</styleSheet>';
+
+    return armarZip([
+      { nombre: "[Content_Types].xml", contenido:
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+        '<Default Extension="xml" ContentType="application/xml"/>' +
+        '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+        '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+        '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+        '</Types>' },
+      { nombre: "_rels/.rels", contenido:
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+        '</Relationships>' },
+      { nombre: "xl/workbook.xml", contenido:
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+        '<sheets><sheet name="' + xmlEscape(nombreHoja) + '" sheetId="1" r:id="rId1"/></sheets>' +
+        '</workbook>' },
+      { nombre: "xl/_rels/workbook.xml.rels", contenido:
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+        '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+        '</Relationships>' },
+      { nombre: "xl/styles.xml", contenido: estilos },
+      { nombre: "xl/worksheets/sheet1.xml", contenido: hoja }
+    ]);
+  }
+
+  /** Descarga el detalle filtrado como Excel. */
+  function exportarExcel() {
+    var columnas = getExportCols();
+    var filas = state._currentTableRows || [];
+    var estado = document.getElementById("export-status");
+
+    function decir(texto, clase) {
+      if (!estado) return;
+      estado.className = "export-status" + (clase ? " " + clase : "");
+      estado.textContent = texto;
+    }
+
+    if (!filas.length) {
+      decir("No hay filas que exportar con los filtros actuales.", "error");
+      return;
+    }
+
+    try {
+      var blob = construirXlsx(columnas, filas, "Reporte Firma Contratos");
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = nombreArchivoExport();
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      decir("\u2713 " + fmtInt(filas.length) + " filas exportadas.", "ok");
+    } catch (err) {
+      decir("No se pudo generar el Excel: " + (err && err.message ? err.message : err), "error");
+    }
+  }
+
+  /** Nombre con la fecha del reporte, para no sobrescribir descargas anteriores. */
+  function nombreArchivoExport() {
+    var partes = ["Seguimiento Firmas"];
+    if (state.restrictedViewer) partes.push(state.restrictedViewer);
+    var hasta = state.meta.to;
+    if (hasta) partes.push(String(hasta).replace(/\//g, "-"));
+    return partes.join(" - ").replace(/[\\/:*?"<>|]/g, "") + ".xlsx";
   }
 
   /* ============================== Master render ============================== */
@@ -1383,7 +1619,7 @@
     document.getElementById("estado-firma-filter").addEventListener("change", function (e) {
       state.tableStateFilter = e.target.value; renderDetailTable(getFilteredRecords());
     });
-    document.getElementById("export-csv").addEventListener("click", exportCsv);
+    document.getElementById("export-excel").addEventListener("click", exportarExcel);
 
     Array.prototype.slice.call(document.querySelectorAll(".table-toggle")).forEach(function (btn) {
       btn.addEventListener("click", function () {
