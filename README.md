@@ -41,6 +41,15 @@ mañana. Si ya estabas al día, lo dice.
 
 No hay carga manual de archivos: los datos los publica la automatización.
 
+## Filtros
+
+Arriba del panel: **Responsable**, **Marca**, **Cliente**, **Con liquidaciones**, búsqueda por
+nombre y rango de semanas. Se combinan entre sí y afectan a todo: indicadores, rankings,
+tabla y lo que se exporta a Excel.
+
+**Con liquidaciones** separa los contratos según esa columna del reporte (Sí / No), para
+revisar por separado los que ya tienen liquidaciones asociadas.
+
 ## Exportar a Excel
 
 El botón **⬇ Exportar a Excel (filtrado)** descarga lo que estés viendo en la tabla, con

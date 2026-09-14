@@ -506,7 +506,7 @@
     records: [],
     restrictedViewer: null,
     meta: { generatedAt: null, from: null, to: null, fileName: "—" },
-    filters: { responsables: new Set(), marcas: new Set(), clientes: new Set(), search: "", weekMin: null, weekMax: null },
+    filters: { responsables: new Set(), marcas: new Set(), clientes: new Set(), liquidaciones: new Set(), search: "", weekMin: null, weekMax: null },
     prevKpis: null,
     sort: { responsable: "pct_asc", marca: "pct_asc" },
     tableSort: { col: "nombre", dir: 1 },
@@ -883,6 +883,7 @@
       if (f.responsables.size && !f.responsables.has(r.responsable)) return false;
       if (f.marcas.size && !f.marcas.has(r.marca)) return false;
       if (f.clientes.size && !f.clientes.has(r.cliente)) return false;
+      if (f.liquidaciones.size && !f.liquidaciones.has(r.conLiquidaciones)) return false;
       if (f.weekMin !== null && (r.semana === null || r.semana < f.weekMin)) return false;
       if (f.weekMax !== null && (r.semana === null || r.semana > f.weekMax)) return false;
       if (f.search) {
@@ -895,7 +896,7 @@
 
   function hasActiveFilters() {
     var f = state.filters;
-    return !!(f.responsables.size || f.marcas.size || f.clientes.size || f.search || f.weekMin !== null || f.weekMax !== null);
+    return !!(f.responsables.size || f.marcas.size || f.clientes.size || f.liquidaciones.size || f.search || f.weekMin !== null || f.weekMax !== null);
   }
 
   function computeKpis(records) {
@@ -1038,6 +1039,19 @@
     var ddCliente = buildDD("cliente", "Cliente", "clientes", optionsFor("cliente"));
     row.insertBefore(ddMarca, row.firstChild);
     row.insertBefore(ddCliente, ddMarca.nextSibling);
+
+    // "Sí" antes que "No": ordenarlo alfabéticamente dejaría el No primero, que no es
+    // el orden en que se piensa el dato.
+    var opcionesLiq = optionsFor("conLiquidaciones").sort(function (a, b) {
+      if (a === b) return 0;
+      if (a === "Sí") return -1;
+      if (b === "Sí") return 1;
+      return a.localeCompare(b, "es");
+    });
+    if (opcionesLiq.length) {
+      var ddLiq = buildDD("liquidaciones", "Con liquidaciones", "liquidaciones", opcionesLiq);
+      row.insertBefore(ddLiq, ddCliente.nextSibling);
+    }
 
     if (!state.restrictedViewer) {
       var ddResp = buildDD("responsable", "Responsable", "responsables", optionsFor("responsable"));
@@ -1601,6 +1615,7 @@
       state.filters.responsables = new Set();
       state.filters.marcas = new Set();
       state.filters.clientes = new Set();
+      state.filters.liquidaciones = new Set();
       state.filters.search = "";
       state.filters.weekMin = null;
       state.filters.weekMax = null;
@@ -1734,13 +1749,14 @@
    * explicación aparente.
    */
   function podarFiltros() {
-    var presentes = { responsables: {}, marcas: {}, clientes: {} };
+    var presentes = { responsables: {}, marcas: {}, clientes: {}, liquidaciones: {} };
     state.records.forEach(function (r) {
       if (r.responsable) presentes.responsables[r.responsable] = true;
       if (r.marca) presentes.marcas[r.marca] = true;
       if (r.cliente) presentes.clientes[r.cliente] = true;
+      if (r.conLiquidaciones) presentes.liquidaciones[r.conLiquidaciones] = true;
     });
-    ["responsables", "marcas", "clientes"].forEach(function (clave) {
+    ["responsables", "marcas", "clientes", "liquidaciones"].forEach(function (clave) {
       Array.from(state.filters[clave]).forEach(function (valor) {
         if (!presentes[clave][valor]) state.filters[clave].delete(valor);
       });
