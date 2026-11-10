@@ -62,17 +62,33 @@ el archivo de origen.
 Se genera sin librerías externas (un `.xlsx` es un ZIP con XML), para no cargar los 875 KB
 que pesaba la librería de Excel frente a los 95 KB de todo el panel.
 
+## Quién es responsable de cada contrato
+
+Lo decide el **cargo** del colaborador, no el supervisor que registra BUK:
+
+| Cargo | Responsable |
+|---|---|
+| TESTEADOR | Romina Andrea Alvarez Garrido |
+| CAPTADOR MODERNO | Nycol Meza |
+
+Un cargo sin regla queda con el supervisor de BUK, salvo que esa persona ya no esté en la
+agencia: entonces pasa a quien la reemplaza (hoy, lo de Gianni Chavarry va a Nycol Meza).
+
+El supervisor original no se pierde: va en el campo `supervisor` de `datos.json` y es lo
+que sale en la columna "Nombre Supervisor" del Excel exportado.
+
 ## Enlaces por responsable
 
-Añadiendo `?viewer=<Nombre Supervisor>` a la dirección, el panel muestra solo el personal
-de esa persona y agrupa el cumplimiento por cliente:
+Añadiendo `?viewer=<Responsable>` a la dirección, el panel muestra solo el personal de esa
+persona y agrupa el cumplimiento por cliente:
 
 ```
-https://marancibia-glitch.github.io/Seguimiento-de-firmas/?viewer=Romina%20Alvarez
+https://marancibia-glitch.github.io/Seguimiento-de-firmas/?viewer=Nycol%20Meza
+https://marancibia-glitch.github.io/Seguimiento-de-firmas/?viewer=Romina%20Andrea%20Alvarez%20Garrido
 ```
 
-El nombre debe coincidir con la columna "Nombre Supervisor". Si no coincide, aparece
-"Enlace no válido".
+El nombre debe coincidir con el que muestra el filtro "Responsable". Si no coincide,
+aparece "Enlace no válido".
 
 **Esto no restringe el acceso.** Es una comodidad para que cada responsable entre directo
 a lo suyo. Todos los registros siguen dentro de la página, así que cualquiera puede ver el

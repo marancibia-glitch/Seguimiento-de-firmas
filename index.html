@@ -552,8 +552,8 @@
 
   var CONTACT_STORAGE_KEY = "firmasContratos_contactos_v1";
   var DEFAULT_CONTACTS = {
-    "Gianni Chavarry Aniceto": { email: "gchavarry@sell-out.cl", link: "" },
-    "Romina Alvarez": { email: "ralvarez@sell-out.cl", link: "" }
+    "Nycol Meza": { email: "nmeza@sell-out.cl", link: "" },
+    "Romina Andrea Alvarez Garrido": { email: "ralvarez@sell-out.cl", link: "" }
   };
 
   function loadContacts() {
@@ -1253,6 +1253,11 @@
    *
    * Si un registro no trae algún campo (por ejemplo un reporte antiguo sin la
    * columna nueva), la celda sale vacía.
+   *
+   * "Nombre Supervisor" sale del campo `supervisor`, que es el dato tal como viene
+   * de BUK. No se usa `responsable` porque ese lo define el cargo y puede no
+   * coincidir con el supervisor. `fallback` cubre los datos publicados antes de
+   * que existiera el campo `supervisor`.
    */
   var EXPORT_COLS = [
     { key: "empresa", label: "Nombre Empresa" },
@@ -1266,7 +1271,7 @@
     { key: "fechaIngreso", label: "Fecha Ingreso Compañía" },
     { key: "fechaTermino", label: "Fecha Término Trabajo" },
     { key: "conLiquidaciones", label: "Con Liquidaciones" },
-    { key: "responsable", label: "Nombre Supervisor" },
+    { key: "supervisor", fallback: "responsable", label: "Nombre Supervisor" },
     { key: "marca", label: "Marca" },
     { key: "cliente", label: "Cliente" },
     { key: "campana", label: "Campaña" },
@@ -1278,12 +1283,13 @@
   ];
 
   /**
-   * Quien entra con un link personal no debe llevarse la columna que identifica al
-   * supervisor de otros; en su archivo todo es suyo, así que esa columna no aporta.
+   * Todos exportan las mismas 20 columnas del reporte. Antes, quien entraba con un
+   * link personal no recibía "Nombre Supervisor" porque coincidía con su propio
+   * nombre; desde que la asignación va por cargo, esa columna es el supervisor que
+   * registra BUK y aporta información también en ese caso.
    */
   function getExportCols() {
-    if (!state.restrictedViewer) return EXPORT_COLS;
-    return EXPORT_COLS.filter(function (c) { return c.key !== "responsable"; });
+    return EXPORT_COLS;
   }
 
   function renderDetailTable(filtered) {
@@ -1449,6 +1455,9 @@
       var numero = indiceFila + 2;
       var celdas = columnas.map(function (col, i) {
         var valor = fila[col.key];
+        if ((valor === null || valor === undefined || valor === "") && col.fallback) {
+          valor = fila[col.fallback];
+        }
         if (valor === null || valor === undefined || valor === "") return "";
         var ref = letraColumna(i + 1) + numero;
         // Los n\u00FAmeros se escriben como n\u00FAmero para poder sumarlos en Excel.
