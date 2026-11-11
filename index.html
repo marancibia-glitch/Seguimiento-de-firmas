@@ -513,8 +513,40 @@
     tableStateFilter: "No firmado"
   };
 
+  /*
+   * Red de seguridad para la asignación por cargo.
+   *
+   * La asignación la hace quien genera datos.json (Apps Script o Generar-Datos.ps1),
+   * que además guarda el supervisor de BUK en el campo `supervisor`. Pero sigue
+   * existiendo una copia antigua del script que publica cada mañana sin esa regla;
+   * si sus datos llegan al panel, aquí se les aplica la misma asignación para que
+   * nunca se muestre el reparto por supervisor.
+   *
+   * Solo actúa sobre registros sin `supervisor`: los que ya vienen asignados no se
+   * tocan. Debe coincidir con ASIGNACION_POR_CARGO y REEMPLAZOS_DE_SUPERVISOR del
+   * Apps Script.
+   */
+  var ASIGNACION_POR_CARGO = {
+    "TESTEADOR": "Romina Andrea Alvarez Garrido",
+    "CAPTADOR MODERNO": "Nycol Meza"
+  };
+  var REEMPLAZOS_DE_SUPERVISOR = {
+    "GIANNI CHAVARRY ANICETO": "Nycol Meza"
+  };
+
+  function asegurarAsignacion(records) {
+    records.forEach(function (r) {
+      if (r.supervisor !== undefined) return;
+      r.supervisor = r.responsable;
+      r.responsable = ASIGNACION_POR_CARGO[normKey(r.cargo)] ||
+        REEMPLAZOS_DE_SUPERVISOR[normKey(r.supervisor)] ||
+        r.supervisor;
+    });
+  }
+
   /** Vuelca un lote de registros en el estado. Se usa al cargar datos.json. */
   function aplicarDatos(records, meta) {
+    asegurarAsignacion(records);
     RAW = records;
     VIEWER = resolveViewer();
     RESTRICTED_NAME = VIEWER.mode === "ok" ? VIEWER.name : null;
@@ -1715,6 +1747,10 @@
         if (!Array.isArray(registros) || registros.length === 0) {
           throw new Error("el archivo de datos llegó vacío");
         }
+
+        // Antes de comparar nombres: si los datos vienen sin asignar por cargo, se
+        // asignan aquí, o quien entra con su link personal no se encontraría.
+        asegurarAsignacion(registros);
 
         // Si el visor entró con un link personal y ya no está en el reporte nuevo,
         // no se le puede mostrar el panel completo.
