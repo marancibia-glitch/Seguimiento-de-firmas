@@ -941,7 +941,8 @@
       if (f.marcas.size && !f.marcas.has(r.marca)) return false;
       if (f.clientes.size && !f.clientes.has(r.cliente)) return false;
       if (f.liquidaciones.size && !f.liquidaciones.has(r.conLiquidaciones)) return false;
-      if (f.tipos.size && !f.tipos.has(r.tipoDocumento)) return false;
+      // Un registro sin tipo cuenta como contrato (igual que en el correo).
+      if (f.tipos.size && !f.tipos.has(r.tipoDocumento || "Contrato")) return false;
       if (f.weekMin !== null && (r.semana === null || r.semana < f.weekMin)) return false;
       if (f.weekMax !== null && (r.semana === null || r.semana > f.weekMax)) return false;
       if (f.search) {
