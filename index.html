@@ -506,7 +506,8 @@
     records: [],
     restrictedViewer: null,
     meta: { generatedAt: null, from: null, to: null, fileName: "—" },
-    filters: { responsables: new Set(), marcas: new Set(), clientes: new Set(), liquidaciones: new Set(), search: "", weekMin: null, weekMax: null },
+    filters: { responsables: new Set(), marcas: new Set(), clientes: new Set(), liquidaciones: new Set(), tipos: new Set(), search: "", weekMin: null, weekMax: null },
+    tiposIniciados: false,
     prevKpis: null,
     sort: { responsable: "pct_asc", marca: "pct_asc" },
     tableSort: { col: "nombre", dir: 1 },
@@ -545,9 +546,22 @@
     });
   }
 
+  /**
+   * "Tipo de documento" (contrato / anexo) llega desde el 17/11/2026. Se deja con la
+   * primera letra en mayúscula para que el filtro y la tabla se vean parejos.
+   */
+  function normalizarTipos(records) {
+    records.forEach(function (r) {
+      if (!r.tipoDocumento) return;
+      var t = String(r.tipoDocumento).trim().toLowerCase();
+      r.tipoDocumento = t.charAt(0).toUpperCase() + t.slice(1);
+    });
+  }
+
   /** Vuelca un lote de registros en el estado. Se usa al cargar datos.json. */
   function aplicarDatos(records, meta) {
     asegurarAsignacion(records);
+    normalizarTipos(records);
     RAW = records;
     VIEWER = resolveViewer();
     RESTRICTED_NAME = VIEWER.mode === "ok" ? VIEWER.name : null;
@@ -557,6 +571,16 @@
       : RAW;
     if (meta) {
       Object.keys(meta).forEach(function (k) { if (meta[k]) state.meta[k] = meta[k]; });
+    }
+    // El seguimiento de firmas es de contratos: al abrir, el panel parte filtrado por
+    // ese tipo y los anexos se ven quitando el filtro "Tipo de documento". Solo la
+    // primera vez, para no pisar lo que la persona elija después. Los datos sin la
+    // columna (reportes anteriores) no tienen filtro de tipo.
+    if (!state.tiposIniciados) {
+      state.tiposIniciados = true;
+      if (state.records.some(function (r) { return r.tipoDocumento === "Contrato"; })) {
+        state.filters.tipos = new Set(["Contrato"]);
+      }
     }
   }
 
@@ -917,6 +941,7 @@
       if (f.marcas.size && !f.marcas.has(r.marca)) return false;
       if (f.clientes.size && !f.clientes.has(r.cliente)) return false;
       if (f.liquidaciones.size && !f.liquidaciones.has(r.conLiquidaciones)) return false;
+      if (f.tipos.size && !f.tipos.has(r.tipoDocumento)) return false;
       if (f.weekMin !== null && (r.semana === null || r.semana < f.weekMin)) return false;
       if (f.weekMax !== null && (r.semana === null || r.semana > f.weekMax)) return false;
       if (f.search) {
@@ -929,7 +954,7 @@
 
   function hasActiveFilters() {
     var f = state.filters;
-    return !!(f.responsables.size || f.marcas.size || f.clientes.size || f.liquidaciones.size || f.search || f.weekMin !== null || f.weekMax !== null);
+    return !!(f.responsables.size || f.marcas.size || f.clientes.size || f.liquidaciones.size || f.tipos.size || f.search || f.weekMin !== null || f.weekMax !== null);
   }
 
   function computeKpis(records) {
@@ -1084,6 +1109,16 @@
     if (opcionesLiq.length) {
       var ddLiq = buildDD("liquidaciones", "Con liquidaciones", "liquidaciones", opcionesLiq);
       row.insertBefore(ddLiq, ddCliente.nextSibling);
+    }
+
+    // Solo aparece si el reporte trae la columna "Tipo de documento".
+    var opcionesTipo = optionsFor("tipoDocumento");
+    if (opcionesTipo.length) {
+      var ddTipo = buildDD("tipo", "Tipo de documento", "tipos", opcionesTipo);
+      row.insertBefore(ddTipo, ddCliente);
+      // buildDD aún no estaba en el documento cuando calculó el contador: se refresca
+      // aquí para que muestre "1 de 2" si el filtro parte activo.
+      updateFilterCount("tipo", "tipos", opcionesTipo.length);
     }
 
     if (!state.restrictedViewer) {
@@ -1271,6 +1306,7 @@
     { key: "marca", label: "Marca" },
     { key: "cliente", label: "Cliente" },
     { key: "cargo", label: "Cargo" },
+    { key: "tipoDocumento", label: "Documento" },
     { key: "region", label: "Región" },
     { key: "semana", label: "Semana" },
     { key: "estadoFirma", label: "Estado Firma" },
@@ -1312,11 +1348,12 @@
     { key: "semana", label: "Semana" },
     { key: "estadoFirma", label: "Estado Firma Colaborador" },
     { key: "estado", label: "Estado" },
-    { key: "responsableReporte", label: "Responsable" }
+    { key: "responsableReporte", label: "Responsable" },
+    { key: "tipoDocumento", label: "Tipo de documento" }
   ];
 
   /**
-   * Todos exportan las mismas 20 columnas del reporte. Antes, quien entraba con un
+   * Todos exportan las mismas 21 columnas del reporte. Antes, quien entraba con un
    * link personal no recibía "Nombre Supervisor" porque coincidía con su propio
    * nombre; desde que la asignación va por cargo, esa columna es el supervisor que
    * registra BUK y aporta información también en ese caso.
@@ -1658,6 +1695,7 @@
       state.filters.marcas = new Set();
       state.filters.clientes = new Set();
       state.filters.liquidaciones = new Set();
+      state.filters.tipos = new Set();
       state.filters.search = "";
       state.filters.weekMin = null;
       state.filters.weekMax = null;
@@ -1795,14 +1833,15 @@
    * explicación aparente.
    */
   function podarFiltros() {
-    var presentes = { responsables: {}, marcas: {}, clientes: {}, liquidaciones: {} };
+    var presentes = { responsables: {}, marcas: {}, clientes: {}, liquidaciones: {}, tipos: {} };
     state.records.forEach(function (r) {
       if (r.responsable) presentes.responsables[r.responsable] = true;
       if (r.marca) presentes.marcas[r.marca] = true;
       if (r.cliente) presentes.clientes[r.cliente] = true;
       if (r.conLiquidaciones) presentes.liquidaciones[r.conLiquidaciones] = true;
+      if (r.tipoDocumento) presentes.tipos[r.tipoDocumento] = true;
     });
-    ["responsables", "marcas", "clientes", "liquidaciones"].forEach(function (clave) {
+    ["responsables", "marcas", "clientes", "liquidaciones", "tipos"].forEach(function (clave) {
       Array.from(state.filters[clave]).forEach(function (valor) {
         if (!presentes[clave][valor]) state.filters[clave].delete(valor);
       });

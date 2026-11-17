@@ -47,6 +47,11 @@ Arriba del panel: **Responsable**, **Marca**, **Cliente**, **Con liquidaciones**
 nombre y rango de semanas. Se combinan entre sí y afectan a todo: indicadores, rankings,
 tabla y lo que se exporta a Excel.
 
+**Tipo de documento** (Contrato / Anexo, columna nueva del reporte desde el 17/11/2026):
+el panel **abre filtrado por Contrato**, porque el seguimiento es de contratos, y los anexos
+se ven quitando el filtro (botón «Todos»). Si el reporte no trae la columna, el filtro no
+aparece.
+
 **Con liquidaciones** separa los contratos según esa columna del reporte (Sí / No), para
 revisar por separado los que ya tienen liquidaciones asociadas.
 
@@ -55,9 +60,9 @@ revisar por separado los que ya tienen liquidaciones asociadas.
 El botón **⬇ Exportar a Excel (filtrado)** descarga lo que estés viendo en la tabla, con
 los filtros aplicados, en un `.xlsx`.
 
-El archivo reproduce **las mismas 20 columnas del reporte de BUK, en el mismo orden**,
-incluida la columna `Responsable` que se agregó al final el 24/08/2026. Así sirve igual que
-el archivo de origen.
+El archivo reproduce **las mismas 21 columnas del reporte de BUK, en el mismo orden**,
+incluidas `Responsable` (agregada al final el 24/08/2026) y `Tipo de documento` (17/11/2026).
+Así sirve igual que el archivo de origen.
 
 Se genera sin librerías externas (un `.xlsx` es un ZIP con XML), para no cargar los 875 KB
 que pesaba la librería de Excel frente a los 95 KB de todo el panel.
